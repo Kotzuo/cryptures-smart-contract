@@ -86,7 +86,7 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
         address winnerAddress;
         CryptureCompleteInfo firstCryptureCompleteInfo;
         CryptureCompleteInfo secondCryptureCompleteInfo;
-        CryptureBattleRoundInfo[100] roundsInfo;
+        CryptureBattleRoundInfo[50] roundsInfo;
     }
 
     struct CryptureAttack {
@@ -371,43 +371,45 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
         CryptureCompleteInfo memory secondCryptureCompleteInfo =
             getCryptureCompleteInfo(secondCryptureId);
 
-        uint256 firstCryptureHealthPoints =
-            firstCryptureCompleteInfo.healthPoints;
-        uint256 secondCryptureHealthPoints =
-            secondCryptureCompleteInfo.healthPoints;
+        // uint256 firstCryptureHealthPoints =
+        //     firstCryptureCompleteInfo.healthPoints;
+        // uint256 secondCryptureHealthPoints =
+        //     secondCryptureCompleteInfo.healthPoints;
 
         bool fistCryptureAttacksFirst =
             firstCryptureCompleteInfo.speed > secondCryptureCompleteInfo.speed;
 
         bytes32 randomValue =
             keccak256(abi.encodePacked(block.timestamp, msg.sender));
-        if (
-            firstCryptureCompleteInfo.speed == secondCryptureCompleteInfo.speed
-        ) {
-            fistCryptureAttacksFirst = uint256(randomValue) % 2 == 0
-                ? true
-                : false;
-            randomValue = _nextRandomValue(randomValue);
-        }
 
-        CryptureBattleRoundInfo[100] memory roundsInfo;
+        CryptureBattleRoundInfo[50] memory roundsInfo;
 
-        for (uint256 round = 0; round < 100; round++) {
+        for (uint256 round = 0; round < 50; round++) {
+            if (
+                firstCryptureCompleteInfo.speed ==
+                secondCryptureCompleteInfo.speed
+            ) {
+                fistCryptureAttacksFirst = uint256(randomValue) % 2 == 0
+                    ? true
+                    : false;
+                randomValue = _nextRandomValue(randomValue);
+            }
+
             if (fistCryptureAttacksFirst) {
                 uint256 firstRandomAttackId =
                     uint256(randomValue) %
                         firstCryptureCompleteInfo.attacks.length;
                 randomValue = _nextRandomValue(randomValue);
 
-                CryptureAttack memory firstChosenCryptureAttack =
-                    firstCryptureCompleteInfo.attacks[firstRandomAttackId];
-
                 uint256 firstCryptureDamage =
                     (((((2 * firstCryptureCompleteInfo.level) / 5) + 2) *
-                        (firstChosenCryptureAttack.power *
+                        (firstCryptureCompleteInfo.attacks[firstRandomAttackId]
+                            .power *
                             (
-                                firstChosenCryptureAttack.category ==
-                                    CryptureAttackCategory.Physical
+                                firstCryptureCompleteInfo.attacks[
+                                    firstRandomAttackId
+                                ]
+                                    .category == CryptureAttackCategory.Physical
                                     ? firstCryptureCompleteInfo.attack /
                                         secondCryptureCompleteInfo.defense
                                     : firstCryptureCompleteInfo.specialAttack /
@@ -415,9 +417,9 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
                                             .specialDefense
                             ))) / 50) + 2;
 
-                secondCryptureHealthPoints -= firstCryptureDamage;
+                secondCryptureCompleteInfo.healthPoints -= firstCryptureDamage;
 
-                if (secondCryptureHealthPoints <= 0) {
+                if (secondCryptureCompleteInfo.healthPoints <= 0) {
                     return
                         CryptureBattleResultDetails(
                             ownerOf(firstCryptureId),
@@ -431,33 +433,36 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
                     uint256(randomValue) %
                         secondCryptureCompleteInfo.attacks.length;
                 randomValue = _nextRandomValue(randomValue);
-                CryptureAttack memory secondChosenCryptureAttack =
-                    secondCryptureCompleteInfo.attacks[secondRandomAttackId];
 
                 uint256 secondCryptureDamage =
                     (((((2 * secondCryptureCompleteInfo.level) / 5) + 2) *
-                        (secondChosenCryptureAttack.power *
+                        (secondCryptureCompleteInfo.attacks[
+                            secondRandomAttackId
+                        ]
+                            .power *
                             (
-                                secondChosenCryptureAttack.category ==
-                                    CryptureAttackCategory.Physical
+                                secondCryptureCompleteInfo.attacks[
+                                    secondRandomAttackId
+                                ]
+                                    .category == CryptureAttackCategory.Physical
                                     ? secondCryptureCompleteInfo.attack /
                                         firstCryptureCompleteInfo.defense
                                     : secondCryptureCompleteInfo.specialAttack /
                                         firstCryptureCompleteInfo.specialDefense
                             ))) / 50) + 2;
 
-                firstCryptureHealthPoints -= secondCryptureDamage;
+                firstCryptureCompleteInfo.healthPoints -= secondCryptureDamage;
 
                 roundsInfo[round] = CryptureBattleRoundInfo(
                     FirstSecond(firstRandomAttackId, secondRandomAttackId),
                     FirstSecond(firstCryptureDamage, secondCryptureDamage),
                     FirstSecond(
-                        firstCryptureHealthPoints,
-                        secondCryptureHealthPoints
+                        firstCryptureCompleteInfo.healthPoints,
+                        secondCryptureCompleteInfo.healthPoints
                     )
                 );
 
-                if (firstCryptureHealthPoints <= 0) {
+                if (firstCryptureCompleteInfo.healthPoints <= 0) {
                     return
                         CryptureBattleResultDetails(
                             ownerOf(secondCryptureId),
@@ -472,24 +477,24 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
                         firstCryptureCompleteInfo.attacks.length;
                 randomValue = _nextRandomValue(randomValue);
 
-                CryptureAttack memory chosenCryptureAttack =
-                    secondCryptureCompleteInfo.attacks[firstRandomAttackId];
-
                 uint256 firstCryptureDamage =
                     (((((2 * secondCryptureCompleteInfo.level) / 5) + 2) *
-                        (chosenCryptureAttack.power *
+                        (secondCryptureCompleteInfo.attacks[firstRandomAttackId]
+                            .power *
                             (
-                                chosenCryptureAttack.category ==
-                                    CryptureAttackCategory.Physical
+                                secondCryptureCompleteInfo.attacks[
+                                    firstRandomAttackId
+                                ]
+                                    .category == CryptureAttackCategory.Physical
                                     ? secondCryptureCompleteInfo.attack /
                                         firstCryptureCompleteInfo.defense
                                     : secondCryptureCompleteInfo.specialAttack /
                                         firstCryptureCompleteInfo.specialDefense
                             ))) / 50) + 2;
 
-                firstCryptureHealthPoints -= firstCryptureDamage;
+                firstCryptureCompleteInfo.healthPoints -= firstCryptureDamage;
 
-                if (firstCryptureHealthPoints <= 0) {
+                if (firstCryptureCompleteInfo.healthPoints <= 0) {
                     return
                         CryptureBattleResultDetails(
                             ownerOf(secondCryptureId),
@@ -503,16 +508,16 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
                     uint256(randomValue) %
                         firstCryptureCompleteInfo.attacks.length;
                 randomValue = _nextRandomValue(randomValue);
-                chosenCryptureAttack = firstCryptureCompleteInfo.attacks[
-                    secondRandomAttackId
-                ];
 
                 uint256 secondCryptureDamage =
                     (((((2 * firstCryptureCompleteInfo.level) / 5) + 2) *
-                        (chosenCryptureAttack.power *
+                        (firstCryptureCompleteInfo.attacks[secondRandomAttackId]
+                            .power *
                             (
-                                chosenCryptureAttack.category ==
-                                    CryptureAttackCategory.Physical
+                                firstCryptureCompleteInfo.attacks[
+                                    secondRandomAttackId
+                                ]
+                                    .category == CryptureAttackCategory.Physical
                                     ? firstCryptureCompleteInfo.attack /
                                         secondCryptureCompleteInfo.defense
                                     : firstCryptureCompleteInfo.specialAttack /
@@ -520,18 +525,18 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
                                             .specialDefense
                             ))) / 50) + 2;
 
-                secondCryptureHealthPoints -= secondCryptureDamage;
+                secondCryptureCompleteInfo.healthPoints -= secondCryptureDamage;
 
                 roundsInfo[round] = CryptureBattleRoundInfo(
                     FirstSecond(firstRandomAttackId, secondRandomAttackId),
                     FirstSecond(firstCryptureDamage, secondCryptureDamage),
                     FirstSecond(
-                        firstCryptureHealthPoints,
-                        secondCryptureHealthPoints
+                        firstCryptureCompleteInfo.healthPoints,
+                        secondCryptureCompleteInfo.healthPoints
                     )
                 );
 
-                if (secondCryptureHealthPoints <= 0) {
+                if (secondCryptureCompleteInfo.healthPoints <= 0) {
                     return
                         CryptureBattleResultDetails(
                             ownerOf(firstCryptureId),
