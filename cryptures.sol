@@ -18,10 +18,21 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
     address private _owner;
 
     enum CrypturesType {Water, Fire, Grass, Random}
+    enum CryptureAttackType {Normal, Grass, Fire, Water}
+    enum CryptureAttackCategory {Physical, Special}
+
+    struct MinMax {
+        uint256 min;
+        uint256 max;
+    }
+    struct FirstSecond {
+        uint256 first;
+        uint256 second;
+    }
 
     struct CryptureInfo {
         uint256 id;
-        uint256 level;
+        uint8 level;
         uint256 xp;
         uint256 wins;
         uint256 losses;
@@ -29,10 +40,22 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
         uint256 washedDate;
         uint8[] attacks;
     }
-
-    struct MinMax {
-        uint256 min;
-        uint256 max;
+    struct CryptureCompleteInfo {
+        uint256 id;
+        uint8 level;
+        uint256 xp;
+        uint256 wins;
+        uint256 losses;
+        uint256 fedDate;
+        uint256 washedDate;
+        CrypturesType cryptureType;
+        uint256 healthPoints;
+        uint256 attack;
+        uint256 defense;
+        uint256 speed;
+        uint256 specialAttack;
+        uint256 specialDefense;
+        CryptureAttack[] attacks;
     }
 
     struct CryptureBaseStats {
@@ -44,12 +67,32 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
         MinMax specialAttack;
         MinMax specialDefense;
     }
+    struct CryptureStats {
+        CrypturesType cryptureType;
+        uint256 healthPoints;
+        uint256 attack;
+        uint256 defense;
+        uint256 speed;
+        uint256 specialAttack;
+        uint256 specialDefense;
+    }
 
-    enum CrypturesAttackType {Normal, Grass, Fire, Water}
+    struct CryptureBattleRoundInfo {
+        FirstSecond cryptureChosenAttackId;
+        FirstSecond cryptureAttackDamage;
+        FirstSecond cryptureHealthPoints;
+    }
+    struct CryptureBattleResultDetails {
+        address winnerAddress;
+        CryptureCompleteInfo firstCryptureCompleteInfo;
+        CryptureCompleteInfo secondCryptureCompleteInfo;
+        CryptureBattleRoundInfo[100] roundsInfo;
+    }
 
-    struct CrypturesAttack {
+    struct CryptureAttack {
         string name;
-        CrypturesAttackType attackType;
+        CryptureAttackType attackType;
+        CryptureAttackCategory category;
         uint256 power;
         uint256 precision;
         uint256 timesToUse;
@@ -60,7 +103,7 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
 
     mapping(CrypturesType => uint256[]) private _crypturesIdByType;
 
-    CrypturesAttack[4] private _crypturesAttacks;
+    CryptureAttack[4] private _crypturesAttacks;
     mapping(CrypturesType => uint8[]) private _crypturesAttackIdByType;
 
     constructor(string memory baseTokenURI) ERC721("Crypture", "CRPT") {
@@ -99,33 +142,37 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
         _crypturesIdByType[CrypturesType.Fire] = [1];
         _crypturesIdByType[CrypturesType.Water] = [2];
 
-        _crypturesAttacks[0] = CrypturesAttack(
+        _crypturesAttacks[0] = CryptureAttack(
             "Tackle",
-            CrypturesAttackType.Normal,
+            CryptureAttackType.Normal,
+            CryptureAttackCategory.Physical,
             40,
             100,
             35
         );
 
-        _crypturesAttacks[1] = CrypturesAttack(
+        _crypturesAttacks[1] = CryptureAttack(
             "Vine Whip",
-            CrypturesAttackType.Grass,
+            CryptureAttackType.Grass,
+            CryptureAttackCategory.Physical,
             45,
             100,
             25
         );
 
-        _crypturesAttacks[2] = CrypturesAttack(
+        _crypturesAttacks[2] = CryptureAttack(
             "Ember",
-            CrypturesAttackType.Fire,
+            CryptureAttackType.Fire,
+            CryptureAttackCategory.Special,
             40,
             100,
             25
         );
 
-        _crypturesAttacks[3] = CrypturesAttack(
+        _crypturesAttacks[3] = CryptureAttack(
             "Water Gun",
-            CrypturesAttackType.Water,
+            CryptureAttackType.Water,
+            CryptureAttackCategory.Special,
             40,
             100,
             25
@@ -155,14 +202,16 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
         onlyOwner
     {
         uint256 id = _tokenIdTracker.current();
+        bytes32 randomValue =
+            keccak256(abi.encodePacked(block.timestamp, msg.sender));
 
         _mint(to, id);
 
         if (cryptureType != CrypturesType.Random) {
             uint256 randomIndex =
-                uint256(
-                    keccak256(abi.encodePacked(block.timestamp, msg.sender))
-                ) % _crypturesIdByType[cryptureType].length;
+                uint256(randomValue) % _crypturesIdByType[cryptureType].length;
+            randomValue = _nextRandomValue(randomValue);
+
             uint256 randomCryptureId =
                 _crypturesIdByType[cryptureType][randomIndex];
 
@@ -177,16 +226,13 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
                 _crypturesAttackIdByType[cryptureType]
             );
         } else {
-            CrypturesType randomType =
-                CrypturesType(
-                    uint256(
-                        keccak256(abi.encodePacked(block.timestamp, msg.sender))
-                    ) % 4
-                );
+            CrypturesType randomType = CrypturesType(uint256(randomValue) % 4);
+
+            randomValue = _nextRandomValue(randomValue);
             uint256 randomIndex =
-                uint256(
-                    keccak256(abi.encodePacked(block.timestamp, msg.sender))
-                ) % _crypturesIdByType[randomType].length;
+                uint256(randomValue) % _crypturesIdByType[randomType].length;
+            randomValue = _nextRandomValue(randomValue);
+
             uint256 randomCryptureId =
                 _crypturesIdByType[randomType][randomIndex];
 
@@ -230,9 +276,284 @@ contract Cryptures is Context, ERC721Enumerable, ERC721Burnable {
     function getCryptureAttack(uint256 id)
         public
         view
-        returns (CrypturesAttack memory)
+        returns (CryptureAttack memory)
     {
         return _crypturesAttacks[id];
+    }
+
+    function getCryptureBaseStats(uint256 id)
+        public
+        view
+        returns (CryptureBaseStats memory)
+    {
+        return _crypturesBaseStats[id];
+    }
+
+    function getStatByLevel(CryptureBaseStats memory baseStats, uint256 level)
+        public
+        pure
+        returns (CryptureStats memory)
+    {
+        CryptureStats memory stats;
+
+        stats.cryptureType = baseStats.cryptureType;
+        stats.healthPoints =
+            ((baseStats.healthPoints.max - baseStats.healthPoints.min) *
+                (level / 256)) +
+            baseStats.healthPoints.max;
+        stats.attack =
+            ((baseStats.attack.max - baseStats.attack.min) * (level / 256)) +
+            baseStats.attack.max;
+        stats.defense =
+            ((baseStats.defense.max - baseStats.defense.min) * (level / 256)) +
+            baseStats.defense.max;
+        stats.speed =
+            ((baseStats.speed.max - baseStats.speed.min) * (level / 256)) +
+            baseStats.speed.max;
+        stats.specialAttack =
+            ((baseStats.specialAttack.max - baseStats.specialAttack.min) *
+                (level / 256)) +
+            baseStats.specialAttack.max;
+        stats.specialDefense =
+            ((baseStats.specialDefense.max - baseStats.specialDefense.min) *
+                (level / 256)) +
+            baseStats.specialDefense.max;
+
+        return stats;
+    }
+
+    function getCryptureCompleteInfo(uint256 id)
+        public
+        view
+        returns (CryptureCompleteInfo memory)
+    {
+        CryptureInfo memory cryptureInfo = getCryptureInfo(id);
+
+        CryptureAttack[] memory cryptureAttacks =
+            new CryptureAttack[](cryptureInfo.attacks.length);
+        for (uint256 i = 0; i < cryptureInfo.attacks.length; i++) {
+            cryptureAttacks[i] = getCryptureAttack(cryptureInfo.attacks[i]);
+        }
+
+        CryptureStats memory cryptureStats =
+            getStatByLevel(
+                getCryptureBaseStats(cryptureInfo.id),
+                cryptureInfo.level
+            );
+
+        return
+            CryptureCompleteInfo(
+                cryptureInfo.id,
+                cryptureInfo.level,
+                cryptureInfo.xp,
+                cryptureInfo.wins,
+                cryptureInfo.losses,
+                cryptureInfo.fedDate,
+                cryptureInfo.washedDate,
+                cryptureStats.cryptureType,
+                cryptureStats.healthPoints,
+                cryptureStats.attack,
+                cryptureStats.defense,
+                cryptureStats.speed,
+                cryptureStats.specialAttack,
+                cryptureStats.specialDefense,
+                cryptureAttacks
+            );
+    }
+
+    function getWinnerBattle(uint256 firstCryptureId, uint256 secondCryptureId)
+        public
+        view
+        returns (CryptureBattleResultDetails memory)
+    {
+        CryptureCompleteInfo memory firstCryptureCompleteInfo =
+            getCryptureCompleteInfo(firstCryptureId);
+        CryptureCompleteInfo memory secondCryptureCompleteInfo =
+            getCryptureCompleteInfo(secondCryptureId);
+
+        uint256 firstCryptureHealthPoints =
+            firstCryptureCompleteInfo.healthPoints;
+        uint256 secondCryptureHealthPoints =
+            secondCryptureCompleteInfo.healthPoints;
+
+        bool fistCryptureAttacksFirst =
+            firstCryptureCompleteInfo.speed > secondCryptureCompleteInfo.speed;
+
+        bytes32 randomValue =
+            keccak256(abi.encodePacked(block.timestamp, msg.sender));
+        if (
+            firstCryptureCompleteInfo.speed == secondCryptureCompleteInfo.speed
+        ) {
+            fistCryptureAttacksFirst = uint256(randomValue) % 2 == 0
+                ? true
+                : false;
+            randomValue = _nextRandomValue(randomValue);
+        }
+
+        CryptureBattleRoundInfo[100] memory roundsInfo;
+
+        for (uint256 round = 0; round < 100; round++) {
+            if (fistCryptureAttacksFirst) {
+                uint256 firstRandomAttackId =
+                    uint256(randomValue) %
+                        firstCryptureCompleteInfo.attacks.length;
+                randomValue = _nextRandomValue(randomValue);
+
+                CryptureAttack memory firstChosenCryptureAttack =
+                    firstCryptureCompleteInfo.attacks[firstRandomAttackId];
+
+                uint256 firstCryptureDamage =
+                    (((((2 * firstCryptureCompleteInfo.level) / 5) + 2) *
+                        (firstChosenCryptureAttack.power *
+                            (
+                                firstChosenCryptureAttack.category ==
+                                    CryptureAttackCategory.Physical
+                                    ? firstCryptureCompleteInfo.attack /
+                                        secondCryptureCompleteInfo.defense
+                                    : firstCryptureCompleteInfo.specialAttack /
+                                        secondCryptureCompleteInfo
+                                            .specialDefense
+                            ))) / 50) + 2;
+
+                secondCryptureHealthPoints -= firstCryptureDamage;
+
+                if (secondCryptureHealthPoints <= 0) {
+                    return
+                        CryptureBattleResultDetails(
+                            ownerOf(firstCryptureId),
+                            firstCryptureCompleteInfo,
+                            secondCryptureCompleteInfo,
+                            roundsInfo
+                        );
+                }
+
+                uint256 secondRandomAttackId =
+                    uint256(randomValue) %
+                        secondCryptureCompleteInfo.attacks.length;
+                randomValue = _nextRandomValue(randomValue);
+                CryptureAttack memory secondChosenCryptureAttack =
+                    secondCryptureCompleteInfo.attacks[secondRandomAttackId];
+
+                uint256 secondCryptureDamage =
+                    (((((2 * secondCryptureCompleteInfo.level) / 5) + 2) *
+                        (secondChosenCryptureAttack.power *
+                            (
+                                secondChosenCryptureAttack.category ==
+                                    CryptureAttackCategory.Physical
+                                    ? secondCryptureCompleteInfo.attack /
+                                        firstCryptureCompleteInfo.defense
+                                    : secondCryptureCompleteInfo.specialAttack /
+                                        firstCryptureCompleteInfo.specialDefense
+                            ))) / 50) + 2;
+
+                firstCryptureHealthPoints -= secondCryptureDamage;
+
+                roundsInfo[round] = CryptureBattleRoundInfo(
+                    FirstSecond(firstRandomAttackId, secondRandomAttackId),
+                    FirstSecond(firstCryptureDamage, secondCryptureDamage),
+                    FirstSecond(
+                        firstCryptureHealthPoints,
+                        secondCryptureHealthPoints
+                    )
+                );
+
+                if (firstCryptureHealthPoints <= 0) {
+                    return
+                        CryptureBattleResultDetails(
+                            ownerOf(secondCryptureId),
+                            firstCryptureCompleteInfo,
+                            secondCryptureCompleteInfo,
+                            roundsInfo
+                        );
+                }
+            } else {
+                uint256 firstRandomAttackId =
+                    uint256(randomValue) %
+                        firstCryptureCompleteInfo.attacks.length;
+                randomValue = _nextRandomValue(randomValue);
+
+                CryptureAttack memory chosenCryptureAttack =
+                    secondCryptureCompleteInfo.attacks[firstRandomAttackId];
+
+                uint256 firstCryptureDamage =
+                    (((((2 * secondCryptureCompleteInfo.level) / 5) + 2) *
+                        (chosenCryptureAttack.power *
+                            (
+                                chosenCryptureAttack.category ==
+                                    CryptureAttackCategory.Physical
+                                    ? secondCryptureCompleteInfo.attack /
+                                        firstCryptureCompleteInfo.defense
+                                    : secondCryptureCompleteInfo.specialAttack /
+                                        firstCryptureCompleteInfo.specialDefense
+                            ))) / 50) + 2;
+
+                firstCryptureHealthPoints -= firstCryptureDamage;
+
+                if (firstCryptureHealthPoints <= 0) {
+                    return
+                        CryptureBattleResultDetails(
+                            ownerOf(secondCryptureId),
+                            firstCryptureCompleteInfo,
+                            secondCryptureCompleteInfo,
+                            roundsInfo
+                        );
+                }
+
+                uint256 secondRandomAttackId =
+                    uint256(randomValue) %
+                        firstCryptureCompleteInfo.attacks.length;
+                randomValue = _nextRandomValue(randomValue);
+                chosenCryptureAttack = firstCryptureCompleteInfo.attacks[
+                    secondRandomAttackId
+                ];
+
+                uint256 secondCryptureDamage =
+                    (((((2 * firstCryptureCompleteInfo.level) / 5) + 2) *
+                        (chosenCryptureAttack.power *
+                            (
+                                chosenCryptureAttack.category ==
+                                    CryptureAttackCategory.Physical
+                                    ? firstCryptureCompleteInfo.attack /
+                                        secondCryptureCompleteInfo.defense
+                                    : firstCryptureCompleteInfo.specialAttack /
+                                        secondCryptureCompleteInfo
+                                            .specialDefense
+                            ))) / 50) + 2;
+
+                secondCryptureHealthPoints -= secondCryptureDamage;
+
+                roundsInfo[round] = CryptureBattleRoundInfo(
+                    FirstSecond(firstRandomAttackId, secondRandomAttackId),
+                    FirstSecond(firstCryptureDamage, secondCryptureDamage),
+                    FirstSecond(
+                        firstCryptureHealthPoints,
+                        secondCryptureHealthPoints
+                    )
+                );
+
+                if (secondCryptureHealthPoints <= 0) {
+                    return
+                        CryptureBattleResultDetails(
+                            ownerOf(firstCryptureId),
+                            firstCryptureCompleteInfo,
+                            secondCryptureCompleteInfo,
+                            roundsInfo
+                        );
+                }
+            }
+        }
+
+        return
+            CryptureBattleResultDetails(
+                address(0),
+                firstCryptureCompleteInfo,
+                secondCryptureCompleteInfo,
+                roundsInfo
+            );
+    }
+
+    function _nextRandomValue(bytes32 value) private pure returns (bytes32) {
+        return keccak256(abi.encode(value));
     }
 
     function _beforeTokenTransfer(

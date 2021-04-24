@@ -11,9 +11,18 @@ contract CrypturesManager is Context {
     Cherishol public cherishol;
     Cryptures public cryptures;
 
-    constructor() {
+    struct BattleRequest {
+        uint256 cryptureId;
+        uint256 cherisholAmount;
+        bool isValid;
+    }
+
+    mapping(address => mapping(address => BattleRequest))
+        private _battlesRequest;
+
+    constructor(string memory baseTokenURI) {
         cherishol = new Cherishol();
-        cryptures = new Cryptures("http://localhost:8000/crypture/");
+        cryptures = new Cryptures(baseTokenURI);
     }
 
     function buyCrypture(Cryptures.CrypturesType cryptureType) public payable {
@@ -50,19 +59,105 @@ contract CrypturesManager is Context {
         }
     }
 
-    function battle(uint256 ownCryptureId, uint256 enemyCryptureId) public {
-        // Cryptures.CryptureStats memory ownCryptureStats =
-        //     cryptures.getCryptureStatus(ownCryptureId);
-        // Cryptures.CryptureStats memory enemyCryptureStats =
-        //     cryptures.getCryptureStatus(enemyCryptureId);
-        // bool gameEnded = false;
-        // while (!gameEnded) {
-        //     if (ownCryptureStats.speed > enemyCryptureStats.speed) {
-        //     } else if (
-        //         ownCryptureStats.speed == enemyCryptureStats.speed
-        //     ) {
-        //     } else {
-        //     }
-        // }
+    function requestBattle(
+        uint256 ownCryptureId,
+        uint256 opponentCryptureId,
+        uint256 cherisholAmount
+    ) public returns (Cryptures.CryptureBattleResultDetails memory) {
+        address opponentAddress = cryptures.ownerOf(opponentCryptureId);
+
+        require(
+            cryptures.ownerOf(ownCryptureId) == _msgSender(),
+            "ERC721: you do not own the crypture especified"
+        );
+        require(
+            opponentAddress != _msgSender(),
+            "CrypturesManager: you cant battle your own crypture"
+        );
+        require(
+            cherisholAmount <= cherishol.balanceOf(_msgSender()),
+            "ERC20: bid amount exceeds balance"
+        );
+
+        BattleRequest memory battleRequest =
+            _battlesRequest[_msgSender()][opponentAddress];
+        if (battleRequest.isValid) {
+            Cryptures.CryptureBattleResultDetails memory battleResultDetails =
+                cryptures.getWinnerBattle(ownCryptureId, opponentCryptureId);
+            address winnerAddress = battleResultDetails.winnerAddress;
+
+            if (winnerAddress == address(0)) {
+                cherishol.transfer(
+                    opponentAddress,
+                    battleRequest.cherisholAmount
+                );
+            } else {
+                cherishol.transfer(
+                    winnerAddress,
+                    winnerAddress == _msgSender()
+                        ? battleRequest.cherisholAmount
+                        : cherisholAmount
+                );
+            }
+
+            return battleResultDetails;
+        } else {
+            _battlesRequest[opponentAddress][_msgSender()] = BattleRequest(
+                ownCryptureId,
+                cherisholAmount,
+                true
+            );
+
+            cherishol.forcedTransfer(
+                _msgSender(),
+                address(this),
+                cherisholAmount
+            );
+
+            Cryptures.CryptureAttack[] memory emptyAttacks =
+                new Cryptures.CryptureAttack[](0);
+
+            Cryptures.CryptureBattleRoundInfo[100] memory emptyRoundsInfo;
+
+            return
+                Cryptures.CryptureBattleResultDetails(
+                    address(0),
+                    Cryptures.CryptureCompleteInfo(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        Cryptures.CrypturesType.Grass,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        emptyAttacks
+                    ),
+                    Cryptures.CryptureCompleteInfo(
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        Cryptures.CrypturesType.Grass,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        emptyAttacks
+                    ),
+                    emptyRoundsInfo
+                );
+        }
     }
 }
